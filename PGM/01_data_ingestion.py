@@ -3,6 +3,7 @@
 Created on Wed Nov  7 18:58:24 2018
 
 @author: Chris
+@filename: 01_data_ingestion.py
 """
 
 # File for data ingestion for small SNOTEL subset to build out workflow
@@ -50,7 +51,7 @@ import os
 #import climata as cl
 #import matplotlib.pyplot as plt
 from climata.snotel import RegionDailyDataIO
-import datetime 
+import datetime  as dt
 
 
 os.chdir('Z:\SNOTEL\SNOTEL_prediction\PGM')
@@ -136,9 +137,18 @@ multiyear_df['date'] = pd.to_datetime(multiyear_df['date'])
 # Doesn't take leap years, etc into account. But, close enough to a first approximation
 # There may be a more sophisticated pandas DateOffset?
 snowyear_offset = -273 # months
-multiyear_df['snowyeardate'] = multiyear_df['date'] + datetime.timedelta(days=snowyear_offset)
+multiyear_df['snowyeardate'] = multiyear_df['date'] + dt.timedelta(days=snowyear_offset)
+multiyear_df['date'] = pd.to_datetime(multiyear_df['date'])
+
 multiyear_df['snowyear'] = pd.DatetimeIndex(multiyear_df['snowyeardate']).year
 pd.crosstab(multiyear_df['snowyear'],columns='count') 
+
+# Add Nth day of year
+# Subtracts current date from beginning of year, then grabs the dt.days attribute, no +1 offset necessary
+multiyear_df['nthdayofyear'] = (multiyear_df['snowyeardate'] - (multiyear_df['snowyeardate'] - pd.offsets.YearBegin())).dt.days  
+
+
+#multiyear_df['snowyeardate'] - dt.date() + 1
 
 #%% Multi-year plot. Works, but then Spyder complains
 
@@ -156,3 +166,18 @@ pd.crosstab(multiyear_df['snowyear'],columns='count')
 
 multiyear_df.to_csv("../DATA/Initial_multiyear_prototype_data.csv")
 
+
+
+
+#%% Test
+#pd.Timestamp(year=multiyear_df['snowyear'][0], month= 1, day= 1) 
+#
+#pd.Timestamp(year=multiyear_df['snowyear'], month= [1] * multiyear_df['snowyear'].size , 
+#             day= [1] * multiyear_df['snowyear'].size) 
+#[1] * multiyear_df['snowyear'].size
+
+#from pandas.tseries.offsets import *
+#(multiyear_df['snowyeardate'] - pd.offsets.YearBegin()) # Get beginning of year!
+#
+#(multiyear_df['snowyeardate'] - (multiyear_df['snowyeardate'] - pd.offsets.YearBegin())).dt.days 
+#stats.describe((multiyear_df['snowyeardate'] - (multiyear_df['snowyeardate'] - pd.offsets.YearBegin())).dt.days ) 
