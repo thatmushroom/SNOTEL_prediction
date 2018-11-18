@@ -13,11 +13,12 @@ import numpy as np
 from scipy import stats
 import matplotlib.pyplot as plt
 import pystan 
+import pickle
 
 os.environ['STAN_NUM_THREADS'] = "8"
 
-os.chdir('Z:\SNOTEL\SNOTEL_prediction\PGM')
-
+#os.chdir('Z:\SNOTEL\SNOTEL_prediction\PGM')
+os.chdir('/mnt/CommunalMemory/thatmushroom/SNOTEL/SNOTEL_prediction/PGM/')
 
 #%%
 
@@ -28,8 +29,18 @@ os.chdir('Z:\SNOTEL\SNOTEL_prediction\PGM')
 
 # Take even-numbered snow years as model fit, odd-numbered snow years as 
 
+#filepath = '/run/user/1000/gvfs/smb-share:server=192.168.0.23,share=homes/thatmushroom/SNOTEL/SNOTEL_prediction/DATA/Initial_multiyear_prototype_data.csv'
+relpath = '../DATA/Initial_multiyear_prototype_data.csv'
+relpath_pickle = '../DATA/Initial_multiyear_prototype_data.pkl'
+multiyear_df = pd.read_csv(relpath ,sep="|", engine='python')
+multiyear_df = pd.read_pickle(relpath_pickle,  compression=None)
 
-multiyear_df = pd.read_csv("../DATA/Initial_multiyear_prototype_data.csv")
+#f = open(relpath, "r")
+#test = f.read()
+#f.close()
+#multiyear_df = pd.read_csv("../DATA/Initial_multiyear_prototype_data.csv",
+#                           sep="|", header=[0])
+
 
 train_test_mask = multiyear_df['snowyear'] % 2 == 0
 stats.describe(train_test_mask) # A frequency table would be better, but, eh
@@ -39,8 +50,6 @@ multiyear_test = multiyear_df[~train_test_mask]
 # Start with predicting for one station
 multiyear_train_station = multiyear_train[multiyear_train.stationtriplet == '1010:OR:SNTL']
 plt.plot(multiyear_train_station.nthdayofyear,multiyear_train_station.value)
-
-
 
 #%% Zero-mean function
 
@@ -68,7 +77,6 @@ plt.plot(multiyear_train_station.nthdayofyear,multiyear_train_station.zeromean_d
 multiyear_train_station = multiyear_train_station[multiyear_train_station.nthdayofyear > 40]
 multiyear_train_station = multiyear_train_station[multiyear_train_station.nthdayofyear < 240]
 
-
 #%% Model data assembly 
 
 # xvar is day of year from snowyeardate, yvar is value. Fit individually for site
@@ -77,9 +85,9 @@ multiyear_train_station = multiyear_train_station[multiyear_train_station.nthday
 
 ## Stan fit:
 # Hyperparameters
-alpha_true = 20
+alpha_true = 5
 rho_true = 7
-sigma_true = 5
+sigma_true = 10
 # Input parameters 
 N = multiyear_train_station.shape[0]
 x = np.asarray(multiyear_train_station['nthdayofyear'])
@@ -97,23 +105,65 @@ onestation_data = {'alpha': alpha_true,
       'N_predict': N_predict,
       'x_predict': x_predict
       }
+#%% Model compile, skip if possible
+
+pred_model = pystan.StanModel(file='./predict_gauss.stan')
+
 #%% Model run
 
-pred_fit = pystan.stan(file='./predict_gauss.stan', data=onestation_data, iter=1000, warmup=0,
-                 chains=4, seed=5838298, refresh=1000, algorithm="Fixed_param")
 
-# If I want to avoid recompiling the model each time...
-#pred_model = pystan.StanModel(file='./predict_gauss.stan')
-#fit = pred_model.sampling(data=onestation_data,iter=1000,chains=4,
-#                          algorithm="Fixed_param",refresh=10)
+pred_fit = pred_model.sampling(data=onestation_data,iter=1000,chains=4,
+                          algorithm="Fixed_param")
 
-pred_fit.plot()
+#%% Model data frame extraction and plotting
+
+#pred_fit.plot()
+pred_fit_summary = pred_fit.summary(pars={"y_predict"})
+pred_fit_df = pred_fit.to_dataframe(diagnostics=False) # NO diagnostics for Fixed param sampling
+
+# Still need to stack details form summary() 
+#pred_fit_summary["summary_colnames"]
+pred_fit_sum_df = pd.DataFrame(pred_fit_summary["summary"],columns = pred_fit_summary["summary_colnames"],)
 
 # Plot prediction of quantiles around zeromean_daily_value
-y_total = pred_fit.extract("y_predict")['y_predict']
+# Have lines for sampled mean, sampled median, CI for 50%, CI for 95%
 
-# TODO still:
-# Plot the posterior quantiles around zeromean_daily_value from y_total.
+dailymean = multiyear_train_station[['dailymean','nthdayofyear']].drop_duplicates()['dailymean'] # dedupe based on index
+nthdayofyear = multiyear_train_station[['dailymean','nthdayofyear']].drop_duplicates()['nthdayofyear']
+# Create the plot object
+_, ax = plt.subplots()
+    # Plot the data, set the linewidth, color and transparency of the
+    # line, provide a label for the legend
+ax.plot(x, y, lw = 0.5, color = '#5380af', alpha = 1, label = 'Data')
+ax.plot(nthdayofyear,pred_fit_sum_df["50%"], lw = 2, color = '#539caf', alpha = 1, label = 'Fit')
+ax.plot(nthdayofyear,pred_fit_sum_df["mean"], lw = 2, color = '#539caf', alpha = 1, label = 'Fit')
+ax.fill_between(nthdayofyear,pred_fit_sum_df["25%"],pred_fit_sum_df["75%"] , color = '#539caf', alpha = 0.4, label = '50% CI')
+ax.fill_between(nthdayofyear,pred_fit_sum_df["2.5%"],pred_fit_sum_df["97.5%"] , color = '#539caf', alpha = 0.2, label = '95% CI')
+
+#%% Plot function sample
+#def lineplotCI(x_data, y_data, sorted_x, low_CI, upper_CI, x_label, y_label, title):
+#    # Create the plot object
+#    _, ax = plt.subplots()
+#
+#    # Plot the data, set the linewidth, color and transparency of the
+#    # line, provide a label for the legend
+#    ax.plot(x_data, y_data, lw = 1, color = '#539caf', alpha = 1, label = 'Fit')
+#    # Shade the confidence interval
+#    ax.fill_between(sorted_x, low_CI, upper_CI, color = '#539caf', alpha = 0.4, label = '95% CI')
+#    # Label the axes and provide a title
+#    ax.set_title(title)
+#    ax.set_xlabel(x_label)
+#    ax.set_ylabel(y_label)
+
+# Reference is https://www.datascience.com/blog/learn-data-science-intro-to-data-visualization-in-matplotlib
+
+#%% Next steps
+
+# Make GP params hyperparams, rather than fixed.
+# Pickle the model? No. Pickle the data I used for the model? Yes
+with open("../DATA/model_input_data.pkl",'wb') as f:
+    pickle.dump(onestation_data, f, pickle.HIGHEST_PROTOCOL)
+
 
 
 # http://natelemoine.com/fast-gaussian-process-models-in-stan/ 
