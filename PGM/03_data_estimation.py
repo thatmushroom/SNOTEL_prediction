@@ -104,7 +104,12 @@ ax.xaxis.set_minor_locator(months)
 # Code assumes a zero-mean function and models residuals about that. 
 # Therefore, find mean per day per station from training dataset and subtract that out
 
+#%% 2 years, sampled weekly. 7
 
+#mask = (multiyear_train_station["snowyear"] == 2004) | (multiyear_train_station["snowyear"] == 2005)
+#multiyear_train_station = multiyear_train_station[mask]
+weekmask = multiyear_train_station.index % 7 == 0 
+multiyear_train_station = multiyear_train_station[weekmask]
 #%% 
 # Two thoughts on data: Either the problem comes from multiple observations per X, 
 # Or it comes from the curve going to zero variance
@@ -124,9 +129,9 @@ datemin = pd.to_datetime(multiyear_train_station.date[0])
 
 ## Stan fit:
 # Hyperparameters
-alpha_true = 5
-rho_true = 7
-sigma_true = 10
+alpha_true = 3
+rho_true = 4
+sigma_true = 5
 # Input parameters 
 N = multiyear_train_station.shape[0]
 x = np.asarray((pd.to_datetime(multiyear_train_station.date) - pd.to_datetime(multiyear_train_station.date[0])).dt.days) 
@@ -148,7 +153,7 @@ onestation_data = {'alpha': alpha_true,
       }
 #%% Model compile, skip if possible
 
-pred_model = pystan.StanModel(file='./predict_gauss.stan')
+#pred_model = pystan.StanModel(file='./predict_gauss.stan')
 
 #%% Model run
 
@@ -171,14 +176,14 @@ pred_fit_sum_df = pd.DataFrame(pred_fit_summary["summary"],columns = pred_fit_su
 # Plot prediction of quantiles around zeromean_daily_value
 # Have lines for sampled mean, sampled median, CI for 50%, CI for 95%
 
-dailymean = multiyear_train_station[['dailymean','nthdayofyear']].drop_duplicates()['dailymean'] # dedupe based on index
-nthdayofyear = multiyear_train_station[['dailymean','nthdayofyear']].drop_duplicates()['nthdayofyear']
+#dailymean = multiyear_train_station[['dailymean','nthdayofyear']].drop_duplicates()['dailymean'] # dedupe based on index
+#nthdayofyear = multiyear_train_station[['dailymean','nthdayofyear']].drop_duplicates()['nthdayofyear']
 # Create the plot object
 _, ax = plt.subplots()
     # Plot the data, set the linewidth, color and transparency of the
     # line, provide a label for the legend
 ax.plot(x, y, lw = 0.5, color = '#5380af', alpha = 1, label = 'Data')
-ax.plot(nthdayofyear,pred_fit_sum_df["50%"], lw = 2, color = '#539caf', alpha = 1, label = 'Fit')
-ax.plot(nthdayofyear,pred_fit_sum_df["mean"], lw = 2, color = '#539caf', alpha = 1, label = 'Fit')
-ax.fill_between(nthdayofyear,pred_fit_sum_df["25%"],pred_fit_sum_df["75%"] , color = '#539caf', alpha = 0.4, label = '50% CI')
-ax.fill_between(nthdayofyear,pred_fit_sum_df["2.5%"],pred_fit_sum_df["97.5%"] , color = '#539caf', alpha = 0.2, label = '95% CI')
+ax.plot(x_predict,pred_fit_sum_df["50%"], lw = 2, color = '#539caf', alpha = 1, label = 'Fit')
+ax.plot(x_predict,pred_fit_sum_df["mean"], lw = 2, color = '#539caf', alpha = 1, label = 'Fit')
+ax.fill_between(x_predict,pred_fit_sum_df["25%"],pred_fit_sum_df["75%"] , color = '#539caf', alpha = 0.4, label = '50% CI')
+ax.fill_between(x_predict,pred_fit_sum_df["2.5%"],pred_fit_sum_df["97.5%"] , color = '#539caf', alpha = 0.2, label = '95% CI')
