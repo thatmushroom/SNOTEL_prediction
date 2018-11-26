@@ -4,3 +4,9 @@ untitled0\.py
 *.csv
 
 *.pkl
+
+PGM/simu_gauss_dev\.stan
+
+PGM/simu_gauss_dev\.py
+
+PGM/predict_gauss_dev\.stan
