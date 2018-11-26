@@ -153,7 +153,7 @@ onestation_data = {'alpha': alpha_true,
       }
 #%% Model compile, skip if possible
 
-#pred_model = pystan.StanModel(file='./predict_gauss.stan')
+pred_model = pystan.StanModel(file='./predict_gauss.stan')
 
 #%% Model run
 
@@ -187,3 +187,14 @@ ax.plot(x_predict,pred_fit_sum_df["50%"], lw = 2, color = '#539caf', alpha = 1, 
 ax.plot(x_predict,pred_fit_sum_df["mean"], lw = 2, color = '#539caf', alpha = 1, label = 'Fit')
 ax.fill_between(x_predict,pred_fit_sum_df["25%"],pred_fit_sum_df["75%"] , color = '#539caf', alpha = 0.4, label = '50% CI')
 ax.fill_between(x_predict,pred_fit_sum_df["2.5%"],pred_fit_sum_df["97.5%"] , color = '#539caf', alpha = 0.2, label = '95% CI')
+
+#%% Save input data, and model/output data
+
+                
+with open("../DATA/model_input_data.pkl",'wb') as f:
+    pickle.dump(onestation_data, f, pickle.HIGHEST_PROTOCOL)
+    
+with open("../DATA/model_output.pkl",'wb') as f:
+    pickle.dump(onestation_data, f, pickle.HIGHEST_PROTOCOL)
+with open("../DATA/pred_model_stan.pkl",'wb') as f:
+    pickle.dump(pred_model,f,pickle.HIGHEST_PROTOCOL)
