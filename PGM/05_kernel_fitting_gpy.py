@@ -227,7 +227,8 @@ kernel.plot()
 
 #%% Try based on locally periodic (SE*periodic)
 #kernel = GPy.kern.RBF(input_dim=1, variance=1., lengthscale=1.) # Square exponential and periodic?
-kernel = GPy.kern.StdPeriodic(input_dim=1)*GPy.kern.RBF(input_dim=1)
+
+kernel = GPy.kern.StdPeriodic(input_dim=1,lengthscale=1)*GPy.kern.RBF(input_dim=1,lengthscale=0.2)
 m = GPy.models.GPRegression(X,Y,kernel)
 print(m)
 fig = m.plot()
@@ -325,7 +326,7 @@ print(m)
 fig = m.plot()
 kernel.plot() 
 
-#%% Heteroskedasticity! 
+#%% Heteroskedasticity! Maybe need to change to a simpler kernel, rbv+periodicmatern52 worked well
 k = rbf * cos + rbf * cos + rbf * cos 
 m_H = GPy.models.GPHeteroscedasticRegression(X,Y,k)
 print(m_H)
@@ -342,6 +343,25 @@ m_H.optimize_restarts(num_restarts = 15)
 print(m_H)
 fig = m_H.plot()
 kernel.plot() 
+
+#%% Heteroskedasticity! Maybe need to change to a simpler kernel, rbv+periodicmatern52 worked well
+k = GPy.kern.PeriodicMatern52(input_dim=1)+GPy.kern.RBF(input_dim=1)
+m_H = GPy.models.GPHeteroscedasticRegression(X,Y,k)
+print(m_H)
+fig = m_H.plot()
+k.plot() 
+
+# Estimate the parameters for reals
+m_H.optimize(messages=True)
+print(m_H)
+fig = m_H.plot()
+k.plot() 
+
+m_H.optimize_restarts(num_restarts = 15)
+print(m_H)
+fig = m_H.plot()
+kernel.plot() 
+
 
  #%% Locally, v3. Closer, but need to do some sort of mean-reversion for each year
 ##kernel = GPy.kern.RBF(input_dim=1, variance=1., lengthscale=1.) # Square exponential and periodic?
@@ -367,7 +387,9 @@ kernel.plot()
 
 #%% Think about desired features for the kernel:
 # Periodic, > 0 always. 
-# Regularly periodic in that it goes to 0 and resets each year, but is not sinusoidal
+# Regularly "periodic" in that it goes to 0 and resets each year, but is not sinusoidal, nor is the maximum in the same spot regularly
+# Quasi-periodic may be a suitable way to describe it
+ 
 # Also, maximum is not in the same place each year
 
 # In online version, need to consider current year as a noisy realization of overall trend
