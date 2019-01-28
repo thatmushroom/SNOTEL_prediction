@@ -216,40 +216,48 @@ print(k3)
 gpflow.train.ScipyOptimizer().minimize(model=m)
 
 #%%
+# This looks to be the winner, at least for a while. 
 print(k3)
 plot(m)
 m.as_pandas_table()
 
+
+
+################### END
 #%%
-
-with gpflow.defer_build():
-    k_0 = gpflow.kernels.Periodic(1)
-    k_0.period.prior = gpflow.priors.Gaussian(1,0.05) 
-    k_0.period.trainable = False
-    k_0.lengthscales.prior = gpflow.priors.Gamma(0.5,1)
-    k_0.variance.prior = gpflow.priors.Gamma(17,1)
-    
-    k_1 = gpflow.kernels.Matern32(1)
-    k_1.lengthscales.prior = gpflow.priors.Gamma(1.54,1)
-    k_1.variance.prior = gpflow.priors.Gamma(17,1)
-    
-    k_2 = gpflow.kernels.Matern32(1)
-    k_2.lengthscales.prior = gpflow.priors.Gamma(.05,1)
-    k_2.variance.prior = gpflow.priors.Gamma(30,1)
-    
-    k_0_mean = gpflow.kernels.Bias(1)
-    
-    k3 = k_0_mean  + k_0*k_1 + k_2
-    #l_3 = gpflow.likelihoods.Gaussian(20)
-    m_HMC = gpflow.models.GPR(X, Y, kern=k3)
-
-m_HMC.build()
-print(m_HMC)
-
-#%%  HMC
-
-sampler = gpflow.train.HMC()
-samples = sampler.sample(m_HMC, num_samples=gpflow.test_util.notebook_niter(500), epsilon=0.05, lmin=10, lmax=20, logprobs=False)
+#
+#with gpflow.defer_build():
+#    k_0 = gpflow.kernels.Periodic(1)
+#    k_0.period.prior = gpflow.priors.Gaussian(1,0.05) 
+#    k_0.period.trainable = False
+#    k_0.lengthscales.prior = gpflow.priors.Gamma(0.5,1)
+#    k_0.variance.prior = gpflow.priors.Gamma(17,1)
+#    
+#    k_1 = gpflow.kernels.Matern32(1)
+#    k_1.lengthscales.prior = gpflow.priors.Gamma(1.54,1)
+#    k_1.variance.prior = gpflow.priors.Gamma(17,1)
+#    
+#    k_2 = gpflow.kernels.Matern32(1)
+#    k_2.lengthscales.prior = gpflow.priors.Gamma(.05,1)
+#    k_2.variance.prior = gpflow.priors.Gamma(30,1)
+#    
+#    k_0_mean = gpflow.kernels.Bias(1)
+#    
+#    k3 = k_0_mean  + k_0*k_1 + k_2
+#    #l_3 = gpflow.likelihoods.Gaussian(20)
+#    m_HMC = gpflow.models.GPR(X, Y, kern=k3)
+#
+#m_HMC.build()
+#print(m_HMC)
+#
+##%%  HMC
+#
+#sampler = gpflow.train.HMC()
+#samples = sampler.sample(m_HMC, num_samples=gpflow.test_util.notebook_niter(500), epsilon=0.05, lmin=10, lmax=20, logprobs=False)
+#
+##%% 
+#print(m_HMC)
+#plot(m_HMC)
 #%% Sparse VGP
 #z = np.linspace(X.min() + .11,X.max()-0.1,500)
 #z = z.reshape(z.shape[0],1)
@@ -278,3 +286,6 @@ samples = sampler.sample(m_HMC, num_samples=gpflow.test_util.notebook_niter(500)
 #plot(m)
 #
 
+
+
+# Just, save one kernel, 
