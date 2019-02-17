@@ -84,48 +84,158 @@ multiyear_week_df['dayssincemindate'] = ( (multiyear_week_df.date - datemin).dt.
 
 
 # For coregionalization, form 2-column input/output with data in col1 and "dimension" (label) in col2
-
-
-
 X = multiyear_week_df[['dayssincemindate','stationtriplet_codes']]
 Y = multiyear_week_df[['value','stationtriplet_codes']]
 
+
+#%% Temporary switch: 
+# Take case of stationtriple_code == 0, 1 only
+# This works. Do I have to do some sort of one-hot-ness? Nope. 0/1/2 should work. 
+
+X = X[X.stationtriplet_codes.isin([0,1,2])]
+Y = Y[Y.stationtriplet_codes.isin([0,1,2])]
+
+#X = X[X.stationtriplet_codes.isin([0,1])] # Given a rank of 1 and output_dim of 2, this works just fine. 
+#Y = Y[Y.stationtriplet_codes.isin([0,1])]
+
+## 
+#%%
 #X = X.apply(pd.to_numeric)
 #Y = Y.apply(pd.to_numeric)
 X = X.values
 Y = Y.values
+
+#%%
+#D=3
+#Q=2
+#R = [1, 1]
+input_dim=1
+
+#coregions = [gpflow.kernels.Coregion(input_dim, output_dim=D, rank=R[q], active_dims=[1])
+#             for q in range(Q)]
+#print(coregions[1])
+
+# Per https://github.com/GPflow/GPflow/issues/542, 
+# change rank of coregionalization to 2
+
 #%% Coregionionalization 
 with gpflow.defer_build():
-    k_0 = gpflow.kernels.Periodic(1)
+    k_0 = gpflow.kernels.Periodic(1,active_dims=[0])
     k_0.period.prior = gpflow.priors.Gaussian(1,0.05) 
     k1 = gpflow.kernels.Matern32(1, active_dims=[0])
-    coreg = gpflow.kernels.Coregion(1, output_dim=2, rank=1, active_dims=[1])
-    kern = k_0 * k1 * coreg
+#    k1 =  gpflow.kernels.Matern32(1)
+    input_dim=1
+
+    coreg = gpflow.kernels.Coregion(input_dim = input_dim, output_dim = 3, 
+                                    rank=2, active_dims = [1]) # Should have rank 2?
+    # 2 related work just fine. 3 is when it starts to break down
+#        coreg = gpflow.kernels.Coregion(input_dim = input_dim, output_dim = 2, 
+#                                    rank=1, active_dims = [1])
+    #coreg = gpflow.kernels.Coregion(1, output_dim=3, rank=1, active_dims=[1]) # 1 2 1 [1] for 2-param. 1 2 2 [1]? Nope. 1 3 1 [1]?
+#    kern = k_0 * k1 * coreg #+ k_0 * k1 * coregions[1]
+    kern = k_0 * k1 * coreg + gpflow.kernels.White(1) #+ k_0 * k1 * coregions[1]
     
-    lik = gpflow.likelihoods.SwitchedLikelihood([gpflow.likelihoods.Gaussian(), 
+    lik = gpflow.likelihoods.SwitchedLikelihood([gpflow.likelihoods.Gaussian(),
                                                  gpflow.likelihoods.Gaussian(),
-                                                 gpflow.likelihoods.Gaussian(),
-                                                 gpflow.likelihoods.Gaussian(),
-                                                 gpflow.likelihoods.Gaussian()]) # 2? 5? I think 5?
+                                                 gpflow.likelihoods.Gaussian()]) # One likelihood per output dim
+    # TODO: 2 gives some sort of partition error. 3 gives non-invertable matrix
     m = gpflow.models.VGP(X, Y, kern=kern, likelihood=lik, num_latent=1)
 
 
 
 m.compile()
-m.kern.kernels[1].W = np.random.randn(2, 1)
+print(kern)
+#%%
+#m.kern.kernels[2].W = np.random.randn(3, 2) # (output_dim, rank)?
+#m.kern.kernels[2].W = np.random.randn(3, 1) # (output_dim, rank)?
+m.kern.kernels[0].kernels[2].W = np.random.randn(3, 2) # (output_dim, rank)? # Used when adding white noise kernel
+
+#m.kern.kernels[0].kernels[2].W = np.random.randn(3, 1) # (output_dim, rank)?
+#m.kern.kernels[1].kernels[2].W = np.random.randn(3, 1)
 print(kern)
 
-gpflow.train.ScipyOptimizer().minimize(model=m)
+
+# Thar be some memory issues. Seems to work after updating gpflow + tensorflow?
+# That's because its now mostly using the CPU, not the GPU. Drat
+# gpflow.train.ScipyOptimizer().minimize(model=m)
+
+# Or, try Adam optimizer?
+
+o = gpflow.train.AdamOptimizer(0.01)
+o.minimize(m, maxiter=150) 
+
+# gpflow.train.ScipyOptimizer().minimize(m) Just checking: Scipy optimizer doesn't work either
+
 # And, it breaks on the cholesky decomposition.
 # TODO: Fix the kernel specification? Start with only two sites, not 5
+# Memory issues! Sparse -> dense doesn't play well?
+
+
+
+# Partition error
+ #partitions[896] = 2 is not in [0, 2)
+	# [[node gradients_4/VGP-6a4a4d7f-160/DynamicPartition_grad/DynamicPartition (defined at C:\Anaconda3\lib\site-packages\gpflow\training\tensorflow_optimizer.py:54)  = DynamicPartition[T=DT_INT32, num_partitions=2, _device="/job:localhost/replica:0/task:0/device:CPU:0"](gradients_4/VGP-6a4a4d7f-160/DynamicPartition_grad/Reshape, VGP-6a4a4d7f-160/Cast_1)]]
+
+
+
+#%% Coregionalization references
+# https://github.com/GPflow/GPflow/issues/563 # Main gpflow reference?
+# https://arxiv.org/pdf/1106.6251.pdf
+# https://github.com/silburt/gp_nn/blob/master/Coregion-py3.ipynb
+# http://gpss.cc/gpss17/slides/multipleOutputGPs.pdf
 
 #%% 
 # 
-print(k3)
+
+#def plotkernelsample(k, ax, xmin=-3, xmax=3):
+#    xx = np.linspace(xmin, xmax, 100)[:,None]
+#    K = k.compute_K_symm(xx)
+#    ax.plot(xx, np.random.multivariate_normal(np.zeros(100), K, 3).T)
+#    ax.set_title(k.__class__.__name__)
+#
+#def plotkernelfunction(K, ax, xmin=-3, xmax=3, other=0):
+#    xx = np.linspace(xmin, xmax, 100)[:,None]
+#    K = k.compute_K_symm(xx)
+#    ax.plot(xx, k.compute_K(xx, np.zeros((1,1)) + other))
+#    ax.set_title(k.__class__.__name__ + ' k(x, %f)'%other)
+#
+#plotkernelfunction(kern)
+#xx = np.linspace(-2, 2, 100)[:,None]
+#   K = kern.compute_K_symm(xx)
+
+
+coreg.W.value @ coreg.W.value.T + np.diag(coreg.kappa.value) # Covariance matrix
+
+Xa = multiyear_week_df[['dayssincemindate','stationtriplet_codes']]
+Ya = multiyear_week_df[['value','stationtriplet_codes']]
+
+X1 = Xa[Xa.stationtriplet_codes.isin([0])]
+Y1 = Ya[Ya.stationtriplet_codes.isin([0])]
+X2 = Xa[Xa.stationtriplet_codes.isin([1])]
+Y2 = Ya[Ya.stationtriplet_codes.isin([1])]
+
+X1 = X1.dayssincemindate.values
+Y1 = Y1.value.values
+X2 = X2.dayssincemindate.values
+Y2 = Y2.value.values
+
+
+def plot_gp(x, mu, var, color='k'):
+    plt.plot(x, mu, color=color, lw=2)
+    plt.plot(x, mu + 2*np.sqrt(var), '--', color=color)
+    plt.plot(x, mu - 2*np.sqrt(var), '--', color=color)
+
+def plot(m):
+    xtest = np.linspace(X1.min(), X1.max(), 1000)[:,None]
+    line, = plt.plot(X1, Y1, 'x', mew=2)
+    mu, var = m.predict_f(np.hstack((xtest, np.zeros_like(xtest))))
+    plot_gp(xtest, mu, var, line.get_color())
+
+    line, = plt.plot(X2, Y2, 'x', mew=2)
+    mu, var = m.predict_f(np.hstack((xtest, np.ones_like(xtest))))
+    plot_gp(xtest, mu, var, line.get_color())
+
 plot(m)
-m.as_pandas_table()
-
-
 #%% Kernel notes from 06
 
 #
