@@ -221,6 +221,12 @@ print(k3)
 plot(m)
 m.as_pandas_table()
 
+#%% Save model
+# gpflow is somewhat unique
+
+model_saver = gpflow.saver.Saver()
+model_saver.save('../DATA/06_univariate_model',m)
+
 
 
 ################### END
